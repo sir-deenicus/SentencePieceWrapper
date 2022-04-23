@@ -12,3 +12,9 @@ sp.Encode "Who are Kurt Gödel and Вагиф Сәмәдоғлу"
 
 sp.Encode "μ α"
   
+for i in 0..32128 do
+    printfn "%A" i
+    try 
+        sp.Decode [|i|] |> ignore
+    with _ -> 
+        printfn "%A" i

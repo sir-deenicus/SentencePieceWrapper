@@ -23,6 +23,9 @@ namespace SentencePieceDotNET
         static private extern void EncodeSentence(IntPtr pSProc, byte[] sentenceBytes, out int idslen, int[] idsout);
 
         [DllImport(dllname)]
+        static private extern void EncodeSentenceAsPieces(IntPtr pSProc, byte[] sentenceBytes, out int piecesLen, out int bufferlen, byte[] textbuffer);
+
+        [DllImport(dllname)]
         static private extern void DecodeSentence(IntPtr pSProc, int len, int[] ids, out int textlen, byte[] textbuffer);
 
         private IntPtr sentencePieceProcessor;
@@ -51,6 +54,26 @@ namespace SentencePieceDotNET
             EncodeSentence(sentencePieceProcessor, bytes, out int len, buffer);
             return buffer[0..len];
         } 
+
+        public string[] EncodeAsPieces(string sentence)
+        {
+            var b = Encoding.Unicode.GetBytes(sentence);
+            var bytes = Encoding.Convert(Encoding.Unicode, Encoding.UTF8, b);
+            var buffer = new byte[bytes.Length * 50];
+            EncodeSentenceAsPieces(sentencePieceProcessor, bytes, out int plen, out int blen, buffer);
+
+            var packed = buffer[0..blen]; 
+            var stringout = new string[plen]; 
+            int loc = 0;
+            for(int i = 0; i < plen; i++)
+            {
+                byte len = packed[loc]; 
+                stringout[i] = Encoding.UTF8.GetString(packed, loc + 1, len);
+                loc = loc + len + 1; 
+            } 
+            
+            return stringout; 
+        }
 
         public string Decode(int[] ids)
         {

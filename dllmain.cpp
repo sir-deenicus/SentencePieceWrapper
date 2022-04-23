@@ -1,7 +1,6 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
-#include <sentencepiece_processor.h>
-
+#include <sentencepiece_processor.h> 
 extern "C" __declspec(dllexport) sentencepiece::SentencePieceProcessor * CreateSentencePieceProcessor()
 {
     return new sentencepiece::SentencePieceProcessor();
@@ -34,6 +33,43 @@ extern "C" __declspec(dllexport) void EncodeSentence(sentencepiece::SentencePiec
         *idslen = (int)ids.size();
 
         std::copy(ids.begin(), ids.end(), idsout);
+    }
+}
+
+extern "C" __declspec(dllexport) void EncodeSentenceAsPieces(sentencepiece::SentencePieceProcessor * pSProc, const char* sentenceBytes, int* pieceslen, int* bufferlen, unsigned char* textbuffer)
+{
+    if (pSProc != NULL)
+    { 
+        std::vector<std::string> piecesVec; 
+        int btotlen = 0;
+        int c = 0;      
+
+        piecesVec = pSProc->EncodeAsPieces (sentenceBytes);  
+
+        int veclen = (int)piecesVec.size();   
+        auto bs = std::make_unique<unsigned char[]>(veclen);
+
+        for (const auto& value : piecesVec) { 
+            btotlen = btotlen + value.size();
+            bs[c] = static_cast<unsigned char>(value.size()); 
+            c++; 
+        }
+                
+        btotlen = btotlen + veclen; 
+
+        auto buffer = new unsigned char[btotlen];        
+
+        int loc = 0;
+        for (int i = 0; i < veclen; i ++) {  
+            std::string str = piecesVec[i];  
+            buffer[loc] = bs[i];
+            std::copy(str.begin(), str.end(), buffer + loc + 1);
+            loc = loc + bs[i] + 1; 
+        } 
+
+        *pieceslen = veclen;
+        *bufferlen = btotlen; 
+        memcpy(textbuffer, buffer, btotlen);
     }
 }
 

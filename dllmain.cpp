@@ -49,7 +49,7 @@ extern "C" __declspec(dllexport) void EncodeSentenceAsPieces(sentencepiece::Sent
         int veclen = (int)piecesVec.size();   
         auto bs = std::make_unique<unsigned char[]>(veclen);
 
-        for (const auto& value : piecesVec) { 
+        for (const auto value : piecesVec) { 
             btotlen = btotlen + value.size();
             bs[c] = static_cast<unsigned char>(value.size()); 
             c++; 

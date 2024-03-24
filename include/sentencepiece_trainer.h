@@ -17,6 +17,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "sentencepiece_processor.h"
 
@@ -24,10 +25,15 @@ namespace sentencepiece {
 
 class TrainerSpec;
 class NormalizerSpec;
+class ModelProto;
 
 namespace pretokenizer {
 class PretokenizerForTrainingInterface;
 }  // namespace pretokenizer
+
+namespace normalizer {
+class Normalizer;
+}  // namespace normalizer
 
 // Iterator over the training sentences.
 // Training sentences are loaded sequentially as follows:
@@ -89,6 +95,17 @@ class SentencePieceTrainer {
       SentenceIterator *sentence_iterator = nullptr,
       std::string *serialized_model_proto = nullptr);
 
+  // The same as above, but passes the list of sentences.
+  static util::Status Train(absl::string_view args,
+                            const std::vector<std::string> &sentences,
+                            std::string *serialized_model_proto = nullptr);
+
+  // The same as above, but passes the list of sentences.
+  static util::Status Train(
+      const std::unordered_map<std::string, std::string> &kwargs,
+      const std::vector<std::string> &sentences,
+      std::string *serialized_model_proto = nullptr);
+
   // Handy function to make a normalizer spec from the pre-compiled
   // normalization name. Do not use this method in production as it crashes
   // When `name` is invalid. Useful for unittesting.
@@ -129,12 +146,12 @@ class SentencePieceTrainer {
   // with comma-separated values. `field_name` must not be a nested message.
   // The body of these functions are automatically generated with
   // data/gen_spec_parser.pl
-  static util::Status SetProtoField(const std::string &name,
-                                    const std::string &value,
+  static util::Status SetProtoField(absl::string_view name,
+                                    absl::string_view value,
                                     TrainerSpec *message);
 
-  static util::Status SetProtoField(const std::string &name,
-                                    const std::string &value,
+  static util::Status SetProtoField(absl::string_view name,
+                                    absl::string_view value,
                                     NormalizerSpec *message);
 
   // Populates model type from string representation, e.g., "bpe".
@@ -146,6 +163,43 @@ class SentencePieceTrainer {
   SentencePieceTrainer() {}
   ~SentencePieceTrainer() {}
 };
+
+class SentencePieceNormalizer {
+ public:
+  SentencePieceNormalizer();
+  virtual ~SentencePieceNormalizer();
+
+  virtual util::Status Load(std::unique_ptr<ModelProto> model_proto);
+
+  virtual util::Status Load(absl::string_view filename);
+
+  virtual util::Status LoadFromSerializedProto(absl::string_view serialized);
+
+  virtual util::Status LoadFromRuleTSV(absl::string_view filename);
+
+  virtual util::Status LoadFromRuleName(absl::string_view name);
+
+  virtual util::Status Normalize(absl::string_view input,
+                                 std::string *normalized) const;
+
+  virtual util::Status Normalize(absl::string_view input,
+                                 std::string *normalized,
+                                 std::vector<size_t> *norm_to_orig) const;
+
+  virtual std::string Normalize(absl::string_view input) const;
+
+  virtual NormalizerSpec *mutable_normalizer_spec() const;
+
+  virtual std::string serialized_model_proto() const;
+
+ private:
+  std::unique_ptr<normalizer::Normalizer> normalizer_;
+  std::unique_ptr<ModelProto> model_proto_;
+};
+
+// Converts the utf8 byte spans into Unicode char span.
+void ConvertToUnicodeAlignment(absl::string_view orig, absl::string_view norm,
+                               std::vector<size_t> *norm_to_orig);
 
 }  // namespace sentencepiece
 

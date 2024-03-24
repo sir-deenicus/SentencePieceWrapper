@@ -10,23 +10,29 @@ namespace SentencePieceDotNET
     {
         const string dllname = "SentencePieceWrapper.dll";
 
-        [DllImport(dllname)]
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]  
         static private extern IntPtr CreateSentencePieceProcessor();
 
-        [DllImport(dllname)]
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
         static private extern void Dispose(IntPtr pointer);
 
-        [DllImport(dllname)]
-        static private extern void Load(IntPtr pointer, string path);
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        static private extern int Load(IntPtr pointer, string path);
 
-        [DllImport(dllname)]
-        static private extern void EncodeSentence(IntPtr pSProc, byte[] sentenceBytes, out int idslen, int[] idsout);
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
+        static private extern IntPtr EncodeSentence(IntPtr pSProc, byte[] sentenceBytes, out int idslen);   
 
-        [DllImport(dllname)]
-        static private extern void EncodeSentenceAsPieces(IntPtr pSProc, byte[] sentenceBytes, out int piecesLen, out int bufferlen, byte[] textbuffer);
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
+        static private extern IntPtr EncodeSentenceAsPieces(IntPtr pSProc, byte[] sentenceBytes, out int pieceslen, out int bufferlen);  
 
-        [DllImport(dllname)]
-        static private extern void DecodeSentence(IntPtr pSProc, int len, int[] ids, out int textlen, byte[] textbuffer);
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
+        static private extern IntPtr DecodeSentence(IntPtr pSProc, int len, int[] ids, out int textlen); 
+  
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
+        static private extern void FreeBuffer(IntPtr buffer);
+ 
+        [DllImport(dllname, CallingConvention = CallingConvention.Cdecl)]
+        static private extern void FreeIdsBuffer(IntPtr sentence);
 
         private IntPtr sentencePieceProcessor;
 
@@ -40,32 +46,60 @@ namespace SentencePieceDotNET
             Dispose(true);
         }
 
-        public void Load(string path)
+        public bool Load(string path)
         {
-            Load(sentencePieceProcessor, path);
+            return Load(sentencePieceProcessor, path) == 1;
         }
 
+        /// <summary>
+        /// Encodes the given sentence into an array of integer token ids.
+        /// </summary>
+        /// <param name="sentence">The sentence to encode.</param>
+        /// <returns>An array of integer token ids representing the encoded sentence.</returns> 
         public int[] Encode(string sentence)
         {
             var b = Encoding.Unicode.GetBytes(sentence);
             var bytes = Encoding.Convert(Encoding.Unicode, Encoding.UTF8, b);
-            var buffer = new int[bytes.Length];
 
-            EncodeSentence(sentencePieceProcessor, bytes, out int len, buffer);
-            return buffer[0..len];
+            var encodedPtr = EncodeSentence(sentencePieceProcessor, bytes, out int len); 
+            if (encodedPtr == IntPtr.Zero)
+            {
+                return new int[0];
+            }
+
+            var ids = new int[len];
+            Marshal.Copy(encodedPtr, ids, 0, len);
+
+            //Free mem allocated in the C++ code
+            FreeIdsBuffer(encodedPtr);
+
+            return ids; 
         } 
 
+        /// <summary>
+        /// Encodes the given sentence into an array of sentence pieces.
+        /// </summary>
+        /// <param name="sentence">The sentence to encode.</param>
+        /// <returns>An array of subword sentence pieces representing the encoded sentence.</returns>
         public string[] EncodeAsPieces(string sentence)
         {
             var b = Encoding.Unicode.GetBytes(sentence);
             var bytes = Encoding.Convert(Encoding.Unicode, Encoding.UTF8, b);
-            var buffer = new byte[bytes.Length * 50];
-            EncodeSentenceAsPieces(sentencePieceProcessor, bytes, out int plen, out int blen, buffer);
+            
+            var buffptr = EncodeSentenceAsPieces(sentencePieceProcessor, bytes, out int piecesLength, out int bufferLength);
+            if (buffptr == IntPtr.Zero)
+            {
+                return new string[0];
+            }
+            var buffer = new byte[bufferLength];
 
-            var packed = buffer[0..blen]; 
-            var stringout = new string[plen]; 
+            Marshal.Copy(buffptr, buffer, 0, bufferLength);
+            FreeBuffer(buffptr);
+             
+            var packed = buffer[0..bufferLength]; 
+            var stringout = new string[piecesLength]; 
             int loc = 0;
-            for(int i = 0; i < plen; i++)
+            for(int i = 0; i < piecesLength; i++)
             {
                 byte len = packed[loc]; 
                 stringout[i] = Encoding.UTF8.GetString(packed, loc + 1, len);
@@ -75,10 +109,23 @@ namespace SentencePieceDotNET
             return stringout; 
         }
 
+        /// <summary>
+        /// Decodes the given array of token ids into a sentence.
+        /// </summary>
+        /// <param name="ids">The array of token (ids) to decode.</param>
+        /// <returns>The decoded sentence.</returns>    
         public string Decode(int[] ids)
         {
-            var textbuffer = new byte[ids.Length * 50];
-            DecodeSentence(sentencePieceProcessor, ids.Length, ids, out int len, textbuffer);
+            var txtbufferpntr = DecodeSentence(sentencePieceProcessor, ids.Length, ids, out int len);
+            if (txtbufferpntr == IntPtr.Zero)
+            {
+                return string.Empty;
+            }
+            var textbuffer = new byte[len];
+            
+            Marshal.Copy(txtbufferpntr, textbuffer, 0, len);
+
+            FreeBuffer(txtbufferpntr);
 
             return Encoding.UTF8.GetString(textbuffer, 0, len);
         } 
